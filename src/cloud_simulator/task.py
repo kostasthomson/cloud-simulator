@@ -1,0 +1,102 @@
+"""
+Task module for cloud simulator.
+
+Represents a workload/application to be executed on the cloud infrastructure.
+"""
+
+from typing import List, Optional
+from dataclasses import dataclass
+
+
+@dataclass
+class TaskConfig:
+    processors_per_vm: float
+    memory_per_vm: float
+    network_bandwidth: float
+    storage_per_vm: float
+    accelerators_per_vm: int
+    num_vms: int
+    total_instructions: float
+    processor_utilization: float
+    memory_utilization: float
+    storage_utilization: float
+    accelerator_utilization: float
+    available_implementations: List[int]
+    arrival_time: float
+
+
+class Task:
+    def __init__(self, task_id: int, config: TaskConfig):
+        self.id = task_id
+        self.config = config
+
+        self.processors_per_vm = config.processors_per_vm
+        self.memory_per_vm = config.memory_per_vm
+        self.network_bandwidth = config.network_bandwidth
+        self.storage_per_vm = config.storage_per_vm
+        self.accelerators = config.accelerators_per_vm
+        self.num_vms = config.num_vms
+
+        self.total_instructions = config.total_instructions
+        self.remaining_instructions = config.total_instructions
+
+        self.processor_utilization = config.processor_utilization
+        self.memory_utilization = config.memory_utilization
+        self.storage_utilization = config.storage_utilization
+        self.accelerator_utilization = config.accelerator_utilization
+
+        self.available_implementations = config.available_implementations
+        self.selected_type: Optional[int] = None
+
+        self.arrival_time = config.arrival_time
+        self.start_time: Optional[float] = None
+        self.completion_time: Optional[float] = None
+
+        self.resource_ids: List[int] = []
+        self.current_util_pmns = [0.0, 0.0, 0.0, 0.0]
+
+    def get_resource_requirements(self) -> List[float]:
+        return [
+            self.processors_per_vm,
+            self.memory_per_vm,
+            self.network_bandwidth,
+            self.storage_per_vm,
+        ]
+
+    def attach_resources(self, resource_ids: List[int]) -> None:
+        self.resource_ids = resource_ids.copy()
+
+    def remap_type(self, resource_type: int) -> None:
+        self.selected_type = resource_type
+
+    def compute_utilization_pmns(self) -> None:
+        self.current_util_pmns = [
+            self.processors_per_vm * self.processor_utilization,
+            self.memory_per_vm * self.memory_utilization,
+            self.network_bandwidth * self.processor_utilization,
+            self.storage_per_vm * self.storage_utilization,
+        ]
+
+    def reduce_instructions(self, completed_instructions: float) -> None:
+        self.remaining_instructions -= completed_instructions
+
+    def is_completed(self) -> bool:
+        return self.remaining_instructions <= 0.0
+
+    def get_state(self) -> dict:
+        return {
+            "id": self.id,
+            "arrival_time": self.arrival_time,
+            "start_time": self.start_time,
+            "completion_time": self.completion_time,
+            "num_vms": self.num_vms,
+            "processors_per_vm": self.processors_per_vm,
+            "memory_per_vm": self.memory_per_vm,
+            "network_bandwidth": self.network_bandwidth,
+            "storage_per_vm": self.storage_per_vm,
+            "accelerators": self.accelerators,
+            "total_instructions": self.total_instructions,
+            "remaining_instructions": self.remaining_instructions,
+            "selected_type": self.selected_type,
+            "resource_ids": self.resource_ids,
+        }
