@@ -27,17 +27,28 @@ class Network:
             return True
         return False
 
-    def unload(self, task) -> None:
-        req_bandwidth = task.get_resource_requirements()[2]
-        self.available_bandwidth += req_bandwidth
-        if task.id in self.deployed_tasks:
-            self.deployed_tasks.remove(task.id)
+    def unload(self, task_or_bandwidth, util_bandwidth=None, num_tasks=None) -> None:
+        if util_bandwidth is None and num_tasks is None:
+            task = task_or_bandwidth
+            req_bandwidth = task.get_resource_requirements()[2]
+            self.available_bandwidth += req_bandwidth
+            if task.id in self.deployed_tasks:
+                self.deployed_tasks.remove(task.id)
+        else:
+            req_bandwidth = task_or_bandwidth
+            self.available_bandwidth += req_bandwidth
 
     def initialize_running_quantities(self) -> None:
         self.running_network_util = 0.0
 
     def increment_running_quantities(self, network_util: float) -> None:
         self.running_network_util += network_util
+
+    def get_available_network(self) -> float:
+        return self.available_bandwidth
+
+    def get_total_network(self) -> float:
+        return self.total_bandwidth
 
     def get_state(self) -> dict:
         return {

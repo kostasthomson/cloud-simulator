@@ -4,21 +4,21 @@ Statistics module for cloud simulator.
 Tracks and aggregates simulation metrics for analysis.
 """
 
-from typing import List, Dict
+from typing import List, Dict, Optional
 from dataclasses import dataclass, field
 
 
 @dataclass
 class PowerModel:
-    idle_power: float
-    peak_power_cpu: float
-    peak_power_acc: float
+    idle_power: float = 0.0
+    peak_power_cpu: float = 0.0
+    peak_power_acc: float = 0.0
 
 
 class Statistics:
-    def __init__(self, resource_type: int, power_model: PowerModel):
+    def __init__(self, resource_type: int = 0, power_model: Optional[PowerModel] = None):
         self.resource_type = resource_type
-        self.power_model = power_model
+        self.power_model = power_model or PowerModel()
 
         self.accepted_tasks = 0
         self.rejected_tasks = 0

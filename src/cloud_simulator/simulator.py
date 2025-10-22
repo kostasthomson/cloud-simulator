@@ -1,102 +1,62 @@
-"""
-Simulator module for cloud simulator.
-
-Main orchestration class that runs the simulation loop.
-"""
-
-import json
 import logging
 from typing import List, Dict
 from pathlib import Path
 
-from .resource import Resource, ResourceConfig
-from .network import Network
-from .task import Task, TaskConfig
-from .statistics import Statistics, PowerModel
+from .inputs import SimulationInputs
 from .cell import Cell
-from .traditional_broker import TraditionalBroker
+from .task import Task, TaskConfig
 
 logger = logging.getLogger(__name__)
 
 
 class Simulator:
-    def __init__(self, config_path: str):
-        self.config_path = Path(config_path)
-        self.config = self._load_config()
 
-        self.max_time = self.config["simulation"]["max_time"]
-        self.update_interval = self.config["simulation"]["update_interval"]
+    def __init__(self, cell_data_file: str, broker_data_file: str, task_data_file: str = None):
+        self.sim_inputs = SimulationInputs()
+        self.sim_inputs.parse(cell_data_file, broker_data_file)
 
-        self.cell = Cell()
-        self.broker = TraditionalBroker(
-            poll_interval=self.config["broker"]["poll_interval"]
-        )
+        self.max_time = self.sim_inputs.max_time
+        self.update_interval = self.sim_inputs.update_interval
+
+        self.cells: List[Cell] = []
+        for cell_input in self.sim_inputs.cell_inputs:
+            cell = Cell(cell_input)
+            broker_type = self.sim_inputs.sosm_integration
+            broker = cell.create_broker(broker_type)
+            broker.init_with_inputs(cell, self.sim_inputs)
+            cell.set_broker(broker)
+            self.cells.append(cell)
 
         self.tasks: List[Task] = []
         self.pending_tasks: List[Task] = []
-        self.completed_tasks: List[Task] = []
-
         self.current_time = 0.0
 
-        self._initialize_cell()
-        self._initialize_tasks()
+        if task_data_file:
+            self._initialize_tasks(task_data_file)
 
-    def _load_config(self) -> dict:
-        with open(self.config_path, 'r') as f:
-            return json.load(f)
+        logger.info(f"Simulator initialized: {len(self.cells)} cells, broker_type={self.sim_inputs.sosm_integration}")
 
-    def _initialize_cell(self) -> None:
-        network_config = self.config["network"]
-        self.cell.set_network(Network(network_config["total_bandwidth"]))
+    def _initialize_tasks(self, task_data_file: str) -> None:
+        import json
+        with open(task_data_file, 'r') as f:
+            task_data = json.load(f)
 
-        for res_type_config in self.config["resource_types"]:
-            res_type = res_type_config["type"]
-            num_resources = res_type_config["num_resources"]
-
-            power_model = PowerModel(
-                idle_power=res_type_config["power"]["idle_power"],
-                peak_power_cpu=res_type_config["power"]["peak_power_cpu"],
-                peak_power_acc=res_type_config["power"]["peak_power_acc"],
-            )
-
-            resources = []
-            for i in range(num_resources):
-                resource_config = ResourceConfig(
-                    total_processors=res_type_config["total_processors"],
-                    total_memory=res_type_config["total_memory"],
-                    total_storage=res_type_config["total_storage"],
-                    total_accelerators=res_type_config["total_accelerators"],
-                    comp_cap_per_proc=res_type_config["comp_cap_per_proc"],
-                    comp_cap_per_acc=res_type_config["comp_cap_per_acc"],
-                    overcommitment_processors=res_type_config.get(
-                        "overcommitment_processors", 1.0
-                    ),
-                )
-                resources.append(Resource(i, res_type, resource_config))
-
-            self.cell.add_resource_type(res_type, resources)
-            self.cell.add_statistics(res_type, Statistics(res_type, power_model))
-
-        self.broker.initialize(self.cell)
-        logger.info(f"Cell initialized with {len(self.cell.resources)} resource types")
-
-    def _initialize_tasks(self) -> None:
         task_id = 0
-        for task_config_dict in self.config["tasks"]:
+        for task_dict in task_data.get("tasks", []):
             task_config = TaskConfig(
-                processors_per_vm=task_config_dict["processors_per_vm"],
-                memory_per_vm=task_config_dict["memory_per_vm"],
-                network_bandwidth=task_config_dict["network_bandwidth"],
-                storage_per_vm=task_config_dict["storage_per_vm"],
-                accelerators_per_vm=task_config_dict.get("accelerators_per_vm", 0),
-                num_vms=task_config_dict["num_vms"],
-                total_instructions=task_config_dict["total_instructions"],
-                processor_utilization=task_config_dict.get("processor_utilization", 1.0),
-                memory_utilization=task_config_dict.get("memory_utilization", 1.0),
-                storage_utilization=task_config_dict.get("storage_utilization", 0.0),
-                accelerator_utilization=task_config_dict.get("accelerator_utilization", 0.0),
-                available_implementations=task_config_dict["available_implementations"],
-                arrival_time=task_config_dict["arrival_time"],
+                processors_per_vm=task_dict["processors_per_vm"],
+                memory_per_vm=task_dict["memory_per_vm"],
+                network_bandwidth=task_dict["network_bandwidth"],
+                storage_per_vm=task_dict["storage_per_vm"],
+                accelerators_per_vm=task_dict.get("accelerators_per_vm", 0),
+                num_vms=task_dict["num_vms"],
+                total_instructions=task_dict["total_instructions"],
+                processor_utilization=task_dict.get("processor_utilization", 1.0),
+                memory_utilization=task_dict.get("memory_utilization", 1.0),
+                storage_utilization=task_dict.get("storage_utilization", 0.0),
+                accelerator_utilization=task_dict.get("accelerator_utilization", 0.0),
+                available_implementations=task_dict["available_implementations"],
+                arrival_time=task_dict["arrival_time"],
             )
             self.tasks.append(Task(task_id, task_config))
             task_id += 1
@@ -105,11 +65,24 @@ class Simulator:
         self.pending_tasks = self.tasks.copy()
         logger.info(f"Initialized {len(self.tasks)} tasks")
 
-    def run(self) -> Dict:
+    def add_task(self, task: Task) -> None:
+        self.tasks.append(task)
+        if task.arrival_time >= self.current_time:
+            self.pending_tasks.append(task)
+            self.pending_tasks.sort(key=lambda t: t.arrival_time)
+
+    def run(self, cell_id: int = 0) -> Dict:
         logger.info(f"Starting simulation: max_time={self.max_time}, update_interval={self.update_interval}")
 
+        if cell_id >= len(self.cells):
+            raise ValueError(f"Invalid cell_id {cell_id}, only {len(self.cells)} cells available")
+
+        cell = self.cells[cell_id]
+        broker = cell.get_broker()
+
         while self.current_time <= self.max_time:
-            logger.debug(f"Timestep: {self.current_time}")
+            if int(self.current_time) % 100 == 0:
+                logger.debug(f"Timestep: {self.current_time}")
 
             arriving_tasks = [
                 t for t in self.pending_tasks
@@ -118,46 +91,56 @@ class Simulator:
 
             for task in arriving_tasks:
                 task.start_time = self.current_time
-                deployed = self.broker.deploy(self.cell, task)
-                if deployed:
-                    logger.info(f"Time {self.current_time}: Task {task.id} deployed")
-                else:
-                    logger.info(f"Time {self.current_time}: Task {task.id} rejected")
+                broker.deploy(cell.get_resources(), cell.get_network(), cell.get_stats(), task)
                 self.pending_tasks.remove(task)
+                logger.debug(f"Time {self.current_time}: Task {task.id} deployed")
 
-            self.broker.update_state_info(self.cell, self.current_time)
-
-            self.broker.timestep(self.cell, self.current_time)
+            broker.update_state_info(cell, self.current_time)
+            broker.timestep(cell)
 
             self.current_time += self.update_interval
 
-            if len(self.pending_tasks) == 0 and self.broker.get_queue_length() == 0:
-                logger.info(f"All tasks completed at time {self.current_time}")
-                break
+            if len(self.pending_tasks) == 0:
+                active_tasks = self._count_active_tasks(broker)
+                if active_tasks == 0:
+                    logger.info(f"All tasks completed at time {self.current_time}")
+                    break
 
         logger.info("Simulation complete")
-        return self._generate_results()
+        return self._generate_results(cell)
 
-    def _generate_results(self) -> Dict:
+    def _count_active_tasks(self, broker) -> int:
+        if hasattr(broker, 'vrms'):
+            count = 0
+            for type_vrms in broker.vrms:
+                for vrm in type_vrms:
+                    count += len(vrm.get_queue())
+            return count
+        elif hasattr(broker, 'get_queue_length'):
+            return broker.get_queue_length()
+        return 0
+
+    def _generate_results(self, cell: Cell) -> Dict:
         results = {
             "simulation_config": {
                 "max_time": self.max_time,
                 "update_interval": self.update_interval,
                 "actual_end_time": self.current_time,
             },
-            "cell_state": self.cell.get_state(),
-            "broker": {
-                "queue_length": self.broker.get_queue_length(),
-                "poll_interval": self.broker.poll_interval,
-            },
+            "cell_state": cell.get_state(),
+            "statistics": {
+                i: stats.get_summary()
+                for i, stats in enumerate(cell.get_stats())
+            }
         }
         return results
 
-    def save_results(self, output_path: str) -> None:
-        results = self._generate_results()
+    def save_results(self, output_path: str, cell_id: int = 0) -> None:
+        results = self._generate_results(self.cells[cell_id])
         output_file = Path(output_path)
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
+        import json
         with open(output_file, 'w') as f:
             json.dump(results, f, indent=2)
 

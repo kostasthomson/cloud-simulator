@@ -49,6 +49,7 @@ class Resource:
 
         self.running_vms = 0
         self.active = 0
+        self.movable = 1
 
         self.actual_utilized_processors = 0.0
         self.actual_utilized_memory = 0.0
@@ -159,3 +160,66 @@ class Resource:
             "running_vms": self.running_vms,
             "active": self.active,
         }
+
+    def get_id(self) -> int:
+        return self.id
+
+    def get_movable(self) -> int:
+        return self.movable
+
+    def get_available_processors(self) -> float:
+        return self.available_processors
+
+    def get_total_processors(self) -> float:
+        return self.total_processors
+
+    def get_available_memory(self) -> float:
+        return self.available_memory
+
+    def get_total_memory(self) -> float:
+        return self.total_memory
+
+    def get_available_storage(self) -> float:
+        return self.available_storage
+
+    def get_total_storage(self) -> float:
+        return self.total_storage
+
+    def get_available_accelerators(self) -> int:
+        return int(self.available_accelerators)
+
+    def get_total_accelerators(self) -> int:
+        return self.total_accelerators
+
+    def get_compute_capability(self) -> float:
+        return self.comp_cap_per_proc * self.total_processors
+
+    def get_accelerator_compute_capability(self) -> float:
+        return self.comp_cap_per_acc * self.total_accelerators
+
+    def get_running_vms(self) -> int:
+        return self.running_vms
+
+    def get_active(self) -> int:
+        return self.active
+
+    def get_actual_utilized_processors(self) -> float:
+        return self.actual_utilized_processors
+
+    def get_actual_rho_accelerators(self) -> float:
+        return self.actual_rho_accelerators
+
+    def get_overcommitment_processors(self) -> float:
+        return self.overcommitment_processors
+
+    def get_current_comp_cap_per_proc(self) -> float:
+        return self.current_comp_cap_per_proc
+
+    def get_current_comp_cap_per_acc(self) -> float:
+        return self.current_comp_cap_per_acc
+
+    def comp_current_comp_cap_per_proc(self) -> None:
+        self.compute_current_comp_cap_per_proc()
+
+    def comp_current_comp_cap_per_acc(self) -> None:
+        self.compute_current_comp_cap_per_acc()
