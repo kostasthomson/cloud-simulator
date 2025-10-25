@@ -1,0 +1,57 @@
+{
+  "Number of applications"             :3,
+  "Minimum and maximum jobs per second":[0,20],
+  "Applications"                       :[
+    {
+      "Application ID"                                  :1,
+      "Number of available implementations"             :3,
+      "Available implementations"                       :[1,2,3],
+      "Minimum - maximum instructions per application"  :[1386228336.48,5544913345.92],
+      "Minimum - maximum VMs per application"           :[1,16],
+      "Minimum - maximum vCPUs per VM"                  :[4,8],
+      "Minimum - maximum memory per VM"                 :[4,8],
+      "Minimum - maximum storage per VM"                :[0.02,0.04],
+      "Minimum - maximum network per VM"                :[0.0025,0.005],
+      "Minimum - maximum actual vCPU utilization"       :[1,1],
+      "Minimum - maximum actual memory utilization"     :[1,1],
+      "Minimum - maximum actual network utilization"    :[1,1],
+      "Type of actual utilization (vCPU,Memory,Network)":[1,1,1],
+      "Accelerator support"                             :[0,1,1],
+      "Rho for accelerator execution per implementation":[0,0.7,0.5]
+    },
+    {
+      "Application ID"                                  :2,
+      "Number of available implementations"             :3,
+      "Available implementations"                       :[1,2,3],
+      "Minimum - maximum instructions per application"  :[462076112.16,2772456672.96],
+      "Minimum - maximum VMs per application"           :[1,8],
+      "Minimum - maximum vCPUs per VM"                  :[8,16],
+      "Minimum - maximum memory per VM"                 :[4,8],
+      "Minimum - maximum storage per VM"                :[0.01,0.02],
+      "Minimum - maximum network per VM"                :[0.0005,0.001],
+      "Minimum - maximum actual vCPU utilization"       :[1,1],
+      "Minimum - maximum actual memory utilization"     :[1,1],
+      "Minimum - maximum actual network utilization"    :[1,1],
+      "Type of actual utilization (vCPU,Memory,Network)":[1,1,1],
+      "Accelerator support"                             :[0,1,1],
+      "Rho for accelerator execution per implementation":[0,0.8,0.9]
+    },
+    {
+      "Application ID"                                  :3,
+      "Number of available implementations"             :2,
+      "Available implementations"                       :[1,4],
+      "Minimum - maximum instructions per application"  :[693114168.24,4158685009.44],
+      "Minimum - maximum VMs per application"           :[1,4],
+      "Minimum - maximum vCPUs per VM"                  :[4,8],
+      "Minimum - maximum memory per VM"                 :[4,8],
+      "Minimum - maximum storage per VM"                :[0.04,0.08],
+      "Minimum - maximum network per VM"                :[0.0025,0.005],
+      "Minimum - maximum actual vCPU utilization"       :[1,1],
+      "Minimum - maximum actual memory utilization"     :[1,1],
+      "Minimum - maximum actual network utilization"    :[1,1],
+      "Type of actual utilization (vCPU,Memory,Network)":[1,1,1],
+      "Accelerator support"                             :[0,1],
+      "Rho for accelerator execution per implementation":[0,0.9]
+    }
+  ]
+}

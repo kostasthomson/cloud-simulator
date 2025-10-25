@@ -33,8 +33,10 @@ class Simulator:
 
         if task_data_file:
             self._initialize_tasks(task_data_file)
+        else:
+            logger.warning("No task data file provided - simulation will run with 0 tasks")
 
-        logger.info(f"Simulator initialized: {len(self.cells)} cells, broker_type={self.sim_inputs.sosm_integration}")
+        logger.info(f"Simulator initialized: {len(self.cells)} cells, {len(self.tasks)} tasks, broker_type={self.sim_inputs.sosm_integration}")
 
     def _initialize_tasks(self, task_data_file: str) -> None:
         import json

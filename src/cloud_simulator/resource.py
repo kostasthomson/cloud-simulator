@@ -76,12 +76,13 @@ class Resource:
 
     def deploy(self, task) -> bool:
         req = task.get_resource_requirements()
+        req_acc = task.get_av_acc()[0]
 
-        if self.probe(req[0], req[1], req[3], task.accelerators) != -1:
+        if self.probe(req[0], req[1], req[3], req_acc) != -1:
             self.available_processors -= req[0]
             self.available_memory -= req[1]
             self.available_storage -= req[3]
-            self.available_accelerators -= task.accelerators
+            self.available_accelerators -= req_acc
 
             self.running_vms += 1
             if self.running_vms > 0:
@@ -93,11 +94,12 @@ class Resource:
 
     def unload(self, task) -> None:
         req = task.get_resource_requirements()
+        req_acc = task.get_av_acc()[0]
 
         self.available_processors += req[0]
         self.available_memory += req[1]
         self.available_storage += req[3]
-        self.available_accelerators += task.accelerators
+        self.available_accelerators += req_acc
 
         self.running_vms -= 1
         if self.running_vms <= 0:

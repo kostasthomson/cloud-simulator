@@ -32,10 +32,22 @@ def main():
         description='Cloud Simulator with Traditional Provisioning Schema'
     )
     parser.add_argument(
-        '--config',
+        '--cell-data',
         type=str,
-        default='config/example_config.json',
-        help='Path to configuration JSON file'
+        default='input/CellData.json',
+        help='Path to cell data JSON file'
+    )
+    parser.add_argument(
+        '--broker-data',
+        type=str,
+        default='input/BrokerData.json',
+        help='Path to broker data JSON file'
+    )
+    parser.add_argument(
+        '--task-data',
+        type=str,
+        default=None,
+        help='Path to task data JSON file (optional)'
     )
     parser.add_argument(
         '--output',
@@ -61,7 +73,7 @@ def main():
     logger.info("=" * 80)
 
     try:
-        simulator = Simulator(args.config)
+        simulator = Simulator(args.cell_data, args.broker_data, args.task_data)
         results = simulator.run()
         simulator.save_results(args.output)
 
@@ -69,12 +81,12 @@ def main():
         logger.info("Simulation Summary:")
         logger.info(f"  End Time: {results['simulation_config']['actual_end_time']}")
 
-        for res_type, stats in results['cell_state']['statistics'].items():
-            logger.info(f"\nResource Type {res_type}:")
+        for idx, stats in enumerate(results['cell_state']['statistics']):
+            logger.info(f"\nResource Type {idx}:")
             logger.info(f"  Accepted Tasks: {stats['accepted_tasks']}")
             logger.info(f"  Rejected Tasks: {stats['rejected_tasks']}")
             logger.info(f"  Acceptance Rate: {stats['acceptance_rate']:.2%}")
-            logger.info(f"  Total Power Consumption: {stats['total_power_consumption']:.2f} W")
+            logger.info(f"  Total Energy Consumption: {stats['total_power_consumption']:.6e}")
             if stats['accepted_tasks'] > 0:
                 logger.info(f"  Avg Waiting Time: {stats['avg_waiting_time']:.2f} time units")
                 logger.info(f"  Avg Response Time: {stats['avg_response_time']:.2f} time units")

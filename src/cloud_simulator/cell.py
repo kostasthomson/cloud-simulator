@@ -88,18 +88,35 @@ class Cell:
             from .sosm_broker import SOSMBroker
             return SOSMBroker()
         elif broker_type == 2:
-            raise NotImplementedError("Improved SOSM not yet implemented")
+            from .improved_sosm_broker import ImprovedSOSMBroker
+            return ImprovedSOSMBroker()
         else:
             raise ValueError(f"Unknown broker type: {broker_type}")
 
     def get_state(self) -> dict:
+        resource_summary = []
+        for type_idx, resources_of_type in enumerate(self.resources):
+            total_resources = len(resources_of_type)
+            active_resources = sum(1 for r in resources_of_type if r.active)
+            total_procs = sum(r.total_processors for r in resources_of_type)
+            avail_procs = sum(r.get_available_processors() for r in resources_of_type)
+            total_mem = sum(r.total_memory for r in resources_of_type)
+            avail_mem = sum(r.get_available_memory() for r in resources_of_type)
+
+            resource_summary.append({
+                "type_id": self.types[type_idx],
+                "total_resources": total_resources,
+                "active_resources": active_resources,
+                "total_processors": total_procs,
+                "available_processors": avail_procs,
+                "total_memory": total_mem,
+                "available_memory": avail_mem,
+            })
+
         return {
             "cell_id": self.cell_id,
             "number_of_types": self.number_of_types,
-            "resources": [
-                [r.get_state() for r in resources_of_type]
-                for resources_of_type in self.resources
-            ],
+            "resource_summary": resource_summary,
             "network": self.network.get_state() if self.network else {},
             "statistics": [stats.get_summary() for stats in self.statistics],
         }
