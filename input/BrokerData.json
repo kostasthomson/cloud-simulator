@@ -1,6 +1,6 @@
 {
   "_comment"                     :"Resource allocation mechanism, choose between 'SOSM', 'Improved SOSM' and 'Traditional'",
-  "Resource allocation mechanism":"Improved SOSM",
+  "Resource allocation mechanism":"SOSM",
   "Brokers"                      :[
     {
       "Number of functions"          :1,

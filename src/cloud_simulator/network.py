@@ -9,9 +9,11 @@ from typing import List
 
 class Network:
     def __init__(self, total_bandwidth: float):
+        self.physical_network = total_bandwidth
         self.total_bandwidth = total_bandwidth
         self.available_bandwidth = total_bandwidth
         self.running_network_util = 0.0
+        self.actual_utilized_network = 0.0
         self.deployed_tasks: List[int] = []
 
     def probe(self, req_bandwidth: float) -> int:
@@ -50,10 +52,17 @@ class Network:
     def get_total_network(self) -> float:
         return self.total_bandwidth
 
+    def get_physical_network(self) -> float:
+        return self.physical_network
+
+    def get_actual_utilized_network(self) -> float:
+        return self.actual_utilized_network
+
     def get_state(self) -> dict:
         return {
             "total_bandwidth": self.total_bandwidth,
             "available_bandwidth": self.available_bandwidth,
             "running_network_util": self.running_network_util,
+            "actual_utilized_network": self.actual_utilized_network,
             "deployed_tasks_count": len(self.deployed_tasks),
         }

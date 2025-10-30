@@ -131,3 +131,5 @@ output/*.json
 *.swp
 *.swo
 *~
+
+/*.md

@@ -103,12 +103,20 @@ def test_sosm_with_simple_task():
         results = sim.run()
 
         logger.info(f"✓ Simulation completed")
-        logger.info(f"  - End time: {results['simulation_config']['actual_end_time']}")
+        logger.info(f"  - Resource allocation mechanism: {results['Resource allocation mechanism']}")
+        logger.info(f"  - Total submitted tasks: {results['Total number of submitted tasks']}")
 
-        for type_idx, stats in results['statistics'].items():
-            logger.info(f"✓ Type {type_idx} statistics:")
-            logger.info(f"  - Accepted tasks: {stats.get('accepted_tasks', 0)}")
-            logger.info(f"  - Rejected tasks: {stats.get('rejected_tasks', 0)}")
+        for cl_output in results['CLSim outputs']:
+            cell_id = cl_output['Cell']
+            hw_type = cl_output['HW Type']
+            outputs = cl_output['Outputs']
+
+            if outputs:
+                last_output = outputs[-1]
+                logger.info(f"✓ Cell {cell_id}, HW Type {hw_type} statistics:")
+                logger.info(f"  - Accepted tasks: {last_output['Total Number of accepted Tasks']}")
+                logger.info(f"  - Rejected tasks: {last_output['Total Number of rejected Tasks']}")
+                logger.info(f"  - Total timesteps collected: {len(outputs)}")
 
         return True
 

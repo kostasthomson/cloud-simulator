@@ -30,19 +30,23 @@ class Resource:
         self.id = resource_id
         self.type = resource_type
 
-        self.total_processors = config.total_processors
+        self.physical_processors = config.total_processors
+        self.physical_memory = config.total_memory
+        self.physical_storage = config.total_storage
+
+        self.overcommitment_processors = config.overcommitment_processors
+        self.total_processors = config.total_processors * config.overcommitment_processors
         self.total_memory = config.total_memory
         self.total_storage = config.total_storage
         self.total_accelerators = config.total_accelerators
 
-        self.available_processors = config.total_processors
-        self.available_memory = config.total_memory
-        self.available_storage = config.total_storage
+        self.available_processors = self.total_processors
+        self.available_memory = self.total_memory
+        self.available_storage = self.total_storage
         self.available_accelerators = config.total_accelerators
 
         self.comp_cap_per_proc = config.comp_cap_per_proc
         self.comp_cap_per_acc = config.comp_cap_per_acc
-        self.overcommitment_processors = config.overcommitment_processors
 
         self.current_comp_cap_per_proc = 0.0
         self.current_comp_cap_per_acc = 0.0
@@ -208,6 +212,9 @@ class Resource:
     def get_actual_utilized_processors(self) -> float:
         return self.actual_utilized_processors
 
+    def get_actual_utilized_memory(self) -> float:
+        return self.actual_utilized_memory
+
     def get_actual_rho_accelerators(self) -> float:
         return self.actual_rho_accelerators
 
@@ -219,6 +226,15 @@ class Resource:
 
     def get_current_comp_cap_per_acc(self) -> float:
         return self.current_comp_cap_per_acc
+
+    def get_physical_processors(self) -> float:
+        return self.physical_processors
+
+    def get_physical_memory(self) -> float:
+        return self.physical_memory
+
+    def get_physical_storage(self) -> float:
+        return self.physical_storage
 
     def comp_current_comp_cap_per_proc(self) -> None:
         self.compute_current_comp_cap_per_proc()

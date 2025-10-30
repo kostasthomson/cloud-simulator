@@ -82,34 +82,56 @@ class Simulator:
         cell = self.cells[cell_id]
         broker = cell.get_broker()
 
-        while self.current_time <= self.max_time:
-            if int(self.current_time) % 100 == 0:
-                logger.debug(f"Timestep: {self.current_time}")
+        timestep_stats = []
+
+        cell.update_stats(0.0)
+        for type_idx in range(cell.get_number_of_types()):
+            stats_dict = cell.get_stats()[type_idx].to_dict()
+            stats_dict['cell_id'] = cell.get_cell_id()
+            stats_dict['type_id'] = cell.get_types()[type_idx]
+            timestep_stats.append(stats_dict)
+
+        time = 0.0
+        while time < self.max_time:
+            if int(time) % 100 == 0:
+                logger.debug(f"Timestep: {time}")
 
             arriving_tasks = [
                 t for t in self.pending_tasks
-                if t.arrival_time <= self.current_time
+                if t.arrival_time <= time
             ]
 
             for task in arriving_tasks:
-                task.start_time = self.current_time
+                task.start_time = time
                 broker.deploy(cell.get_resources(), cell.get_network(), cell.get_stats(), task)
                 self.pending_tasks.remove(task)
-                logger.debug(f"Time {self.current_time}: Task {task.id} deployed")
+                logger.debug(f"Time {time}: Task {task.id} deployed")
 
-            broker.update_state_info(cell, self.current_time)
             broker.timestep(cell)
+            broker.update_state_info(cell, time)
+            cell.update_stats(time)
 
-            self.current_time += self.update_interval
+            if int(time + 1) % int(self.update_interval) == 0:
+                for type_idx in range(cell.get_number_of_types()):
+                    stats_dict = cell.get_stats()[type_idx].to_dict()
+                    stats_dict['cell_id'] = cell.get_cell_id()
+                    stats_dict['type_id'] = cell.get_types()[type_idx]
+                    timestep_stats.append(stats_dict)
+
+                progress = 100.0 * (time + 1) / self.max_time
+                logger.info(f"Simulation at: {progress:.2f}%")
+
+            time += 1.0
 
             if len(self.pending_tasks) == 0:
                 active_tasks = self._count_active_tasks(broker)
                 if active_tasks == 0:
-                    logger.info(f"All tasks completed at time {self.current_time}")
+                    logger.info(f"All tasks completed at time {time}")
                     break
 
+        self.current_time = time
         logger.info("Simulation complete")
-        return self._generate_results(cell)
+        return self._generate_results(cell, timestep_stats)
 
     def _count_active_tasks(self, broker) -> int:
         if hasattr(broker, 'vrms'):
@@ -122,28 +144,47 @@ class Simulator:
             return broker.get_queue_length()
         return 0
 
-    def _generate_results(self, cell: Cell) -> Dict:
+    def _generate_results(self, cell: Cell, timestep_stats: list) -> Dict:
+        cl_sim_outputs = []
+
+        for type_idx in range(cell.get_number_of_types()):
+            outputs = []
+            for stats in timestep_stats:
+                if stats.get('cell_id') == cell.get_cell_id() and stats.get('type_id') == cell.get_types()[type_idx]:
+                    stats_copy = {k: v for k, v in stats.items() if k not in ['cell_id', 'type_id']}
+                    outputs.append(stats_copy)
+
+            cl_sim_outputs.append({
+                "Cell": cell.get_cell_id(),
+                "HW Type": cell.get_types()[type_idx],
+                "Outputs": outputs
+            })
+
+        broker_type_name = "Traditional"
+        if self.sim_inputs.sosm_integration == 1:
+            broker_type_name = "SOSM"
+        elif self.sim_inputs.sosm_integration == 2:
+            broker_type_name = "Improved SOSM"
+
         results = {
-            "simulation_config": {
-                "max_time": self.max_time,
-                "update_interval": self.update_interval,
-                "actual_end_time": self.current_time,
-            },
-            "cell_state": cell.get_state(),
-            "statistics": {
-                i: stats.get_summary()
-                for i, stats in enumerate(cell.get_stats())
-            }
+            "Resource allocation mechanism": broker_type_name,
+            "Total number of submitted tasks": len(self.tasks),
+            "CLSim outputs": cl_sim_outputs
         }
         return results
 
-    def save_results(self, output_path: str, cell_id: int = 0) -> None:
-        results = self._generate_results(self.cells[cell_id])
+    def save_results(self, output_path: str, results: Dict = None) -> None:
+        if results is None:
+            raise ValueError("Results must be provided. Call run() first and pass its return value.")
+
         output_file = Path(output_path)
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
         import json
         with open(output_file, 'w') as f:
-            json.dump(results, f, indent=2)
+            json.dump(results, f, indent=4)
 
         logger.info(f"Results saved to {output_path}")
+
+    def get_broker(self) -> str:
+        return self.sim_inputs.get_broker()

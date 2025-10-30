@@ -93,6 +93,92 @@ class Cell:
         else:
             raise ValueError(f"Unknown broker type: {broker_type}")
 
+    def update_stats(self, timestep: float) -> None:
+        for i in range(self.number_of_types):
+            self.statistics[i].alloc = 1
+            self.statistics[i].current_timestep = timestep
+
+            if self.network:
+                self.statistics[i].total_network = self.network.get_total_network()
+                self.statistics[i].available_network = self.network.get_available_network()
+                self.statistics[i].utilized_network = self.statistics[i].total_network - self.statistics[i].available_network
+                self.statistics[i].actual_utilized_network = self.network.get_actual_utilized_network()
+                self.statistics[i].physical_network = self.network.get_physical_network()
+
+            processors_per_server = self.resources[i][0].get_total_processors()
+            memory_per_server = self.resources[i][0].get_total_memory()
+            storage_per_server = self.resources[i][0].get_total_storage()
+            accelerators_per_server = self.resources[i][0].get_total_accelerators()
+
+            available_memory = 0.0
+            physical_memory = 0.0
+            total_memory = 0.0
+
+            available_processors = 0.0
+            physical_processors = 0.0
+            total_processors = 0.0
+
+            available_storage = 0.0
+            physical_storage = 0.0
+            total_storage = 0.0
+
+            available_accelerators = 0
+            total_accelerators = 0
+
+            active_servers = 0
+            running_vms = 0
+
+            actual_utilized_processors = 0.0
+            actual_utilized_memory = 0.0
+
+            for j in range(self.number_of_resources_per_type[i]):
+                physical_processors += self.resources[i][j].get_physical_processors()
+                total_processors += self.resources[i][j].get_total_processors()
+                available_processors += self.resources[i][j].get_available_processors()
+                physical_memory += self.resources[i][j].get_physical_memory()
+                total_memory += self.resources[i][j].get_total_memory()
+                available_memory += self.resources[i][j].get_available_memory()
+                physical_storage += self.resources[i][j].get_physical_storage()
+                total_storage += self.resources[i][j].get_total_storage()
+                available_storage += self.resources[i][j].get_available_storage()
+                total_accelerators += self.resources[i][j].get_total_accelerators()
+                available_accelerators += self.resources[i][j].get_available_accelerators()
+                active_servers += self.resources[i][j].get_active()
+                running_vms += self.resources[i][j].get_running_vms()
+
+                actual_utilized_processors += self.resources[i][j].get_actual_utilized_processors()
+                actual_utilized_memory += self.resources[i][j].get_actual_utilized_memory()
+
+            self.statistics[i].physical_processors = physical_processors
+            self.statistics[i].total_processors = total_processors
+            self.statistics[i].available_processors = available_processors
+            self.statistics[i].utilized_processors = total_processors - available_processors
+            self.statistics[i].physical_memory = physical_memory
+            self.statistics[i].total_memory = total_memory
+            self.statistics[i].available_memory = available_memory
+            self.statistics[i].utilized_memory = total_memory - available_memory
+            self.statistics[i].physical_storage = physical_storage
+            self.statistics[i].total_storage = total_storage
+            self.statistics[i].available_storage = available_storage
+            self.statistics[i].utilized_storage = total_storage - available_storage
+            self.statistics[i].total_accelerators = total_accelerators
+            self.statistics[i].available_accelerators = available_accelerators
+            self.statistics[i].utilized_accelerators = total_accelerators - available_accelerators
+            self.statistics[i].active_servers = active_servers
+            self.statistics[i].running_vms = running_vms
+            self.statistics[i].actual_utilized_processors = actual_utilized_processors
+            self.statistics[i].actual_utilized_memory = actual_utilized_memory
+
+            processors_over_active_servers = active_servers * processors_per_server
+            memory_over_active_servers = active_servers * memory_per_server
+            storage_over_active_servers = active_servers * storage_per_server
+            accelerators_over_active_servers = active_servers * accelerators_per_server
+
+            self.statistics[i].processors_over_active_servers = processors_over_active_servers
+            self.statistics[i].memory_over_active_servers = memory_over_active_servers
+            self.statistics[i].storage_over_active_servers = storage_over_active_servers
+            self.statistics[i].accelerators_over_active_servers = accelerators_over_active_servers
+
     def get_state(self) -> dict:
         resource_summary = []
         for type_idx, resources_of_type in enumerate(self.resources):

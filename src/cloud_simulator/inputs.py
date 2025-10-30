@@ -3,6 +3,8 @@ from typing import List, Optional
 from dataclasses import dataclass, field
 
 
+IntegrationMap = ["Traditional", "SOSM", "Improved SOSM"]
+
 @dataclass
 class BrokerInputs:
     number_of_functions: int = 0
@@ -171,12 +173,7 @@ class SimulationInputs:
         self.num_of_cells = cell_data['Number of Cells']
 
         mechanism = broker_data.get('Resource allocation mechanism', 'Traditional')
-        if mechanism == 'Traditional':
-            self.sosm_integration = 0
-        elif mechanism == 'SOSM':
-            self.sosm_integration = 1
-        elif mechanism == 'Improved SOSM':
-            self.sosm_integration = 2
+        self.sosm_integration = IntegrationMap.index(mechanism)
 
         for i, cell in enumerate(cell_data['Cells']):
             cell_input = CellInputs()
@@ -236,3 +233,6 @@ class SimulationInputs:
         print(f"SOSM Integration: {self.sosm_integration}")
         for cell_input in self.cell_inputs:
             cell_input.print()
+
+    def get_broker(self) -> str:
+        return IntegrationMap[self.sosm_integration]

@@ -46,7 +46,7 @@ def main():
     parser.add_argument(
         '--task-data',
         type=str,
-        default=None,
+        default='input/TaskData.json',
         help='Path to task data JSON file (optional)'
     )
     parser.add_argument(
@@ -68,28 +68,33 @@ def main():
     setup_logging(args.log_level)
     logger = logging.getLogger(__name__)
 
-    logger.info("=" * 80)
-    logger.info("Cloud Simulator - Traditional Provisioning Schema")
-    logger.info("=" * 80)
-
     try:
         simulator = Simulator(args.cell_data, args.broker_data, args.task_data)
+        logger.info("=" * 80)
+        logger.info(f"Cloud Simulator - {simulator.get_broker()} Provisioning Schema")
+        logger.info("=" * 80)
         results = simulator.run()
-        simulator.save_results(args.output)
+        simulator.save_results(args.output, results)
 
         logger.info("=" * 80)
         logger.info("Simulation Summary:")
-        logger.info(f"  End Time: {results['simulation_config']['actual_end_time']}")
+        logger.info(f"  Resource allocation mechanism: {results['Resource allocation mechanism']}")
+        logger.info(f"  Total number of submitted tasks: {results['Total number of submitted tasks']}")
 
-        for idx, stats in enumerate(results['cell_state']['statistics']):
-            logger.info(f"\nResource Type {idx}:")
-            logger.info(f"  Accepted Tasks: {stats['accepted_tasks']}")
-            logger.info(f"  Rejected Tasks: {stats['rejected_tasks']}")
-            logger.info(f"  Acceptance Rate: {stats['acceptance_rate']:.2%}")
-            logger.info(f"  Total Energy Consumption: {stats['total_power_consumption']:.6e}")
-            if stats['accepted_tasks'] > 0:
-                logger.info(f"  Avg Waiting Time: {stats['avg_waiting_time']:.2f} time units")
-                logger.info(f"  Avg Response Time: {stats['avg_response_time']:.2f} time units")
+        for cl_output in results['CLSim outputs']:
+            cell_id = cl_output['Cell']
+            hw_type = cl_output['HW Type']
+            outputs = cl_output['Outputs']
+
+            if outputs:
+                last_output = outputs[-1]
+                logger.info(f"\nCell {cell_id}, HW Type {hw_type}:")
+                logger.info(f"  Active Servers: {last_output['Active Servers']}")
+                logger.info(f"  Running VMs: {last_output['Running VMs']}")
+                logger.info(f"  Accepted Tasks: {last_output['Total Number of accepted Tasks']}")
+                logger.info(f"  Rejected Tasks: {last_output['Total Number of rejected Tasks']}")
+                logger.info(f"  Total Energy Consumption: {last_output['Total Energy Consumption']:.6e} GWh")
+                logger.info(f"  Total Timesteps: {len(outputs)}")
 
         logger.info("=" * 80)
         logger.info(f"Results saved to: {args.output}")

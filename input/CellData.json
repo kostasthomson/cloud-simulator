@@ -1,6 +1,6 @@
 {
   "Maximum simulation time":1000,
-  "Update interval"        :100,
+  "Update interval"        :10,
   "Number of Cells"        :3,
   "Cells"                  :[
     {
