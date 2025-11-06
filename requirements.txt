@@ -1,0 +1,7 @@
+requests
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+python-json-logger
+numpy
