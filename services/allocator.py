@@ -4,7 +4,7 @@ Starts with a simple heuristic approach optimizing for energy efficiency.
 """
 from typing import Optional, Tuple, List
 import logging
-from models.schemas import AllocationRequest, AllocationDecision, CellStatus, HardwareType
+from models.schemas import AllocationRequest, AllocationDecision, VMAllocation, CellStatus, HardwareType
 from services.energy_calculator import EnergyCalculator
 
 
@@ -38,19 +38,18 @@ class TaskAllocator:
         self.allocation_count += 1
 
         try:
-            # Find best allocation using energy-aware heuristic
             allocation = self._heuristic_energy_aware_allocation(request)
 
             if allocation:
-                cell_id, hw_type_id, energy_cost, reason = allocation
+                vm_allocations, energy_cost, reason = allocation
                 logger.info(
-                    f"Task {request.task.task_id} allocated to Cell {cell_id}, "
-                    f"HW Type {hw_type_id}, Est. Energy: {energy_cost:.4f} kWh"
+                    f"Task {request.task.task_id} allocated {len(vm_allocations)} VMs, "
+                    f"Est. Energy: {energy_cost:.4f} kWh"
                 )
                 return AllocationDecision(
                     success=True,
-                    cell_id=cell_id,
-                    hw_type_id=hw_type_id,
+                    num_vms_allocated=len(vm_allocations),
+                    vm_allocations=vm_allocations,
                     estimated_energy_cost=energy_cost,
                     reason=reason,
                     allocation_method="heuristic_energy_aware",
@@ -61,6 +60,7 @@ class TaskAllocator:
                 logger.warning(f"Task {request.task.task_id} rejected - no suitable resources")
                 return AllocationDecision(
                     success=False,
+                    num_vms_allocated=0,
                     reason="No suitable resources available in any cell",
                     allocation_method="heuristic_energy_aware",
                     timestamp=request.timestamp
@@ -76,64 +76,65 @@ class TaskAllocator:
             )
 
     def _heuristic_energy_aware_allocation(
-        self, 
+        self,
         request: AllocationRequest
-    ) -> Optional[Tuple[int, int, float, str]]:
+    ) -> Optional[Tuple[List[VMAllocation], float, str]]:
         """
-        Heuristic allocation optimizing for energy efficiency.
+        Heuristic allocation optimizing for energy efficiency with multi-VM support.
 
         Strategy:
-        1. Filter cells/HW types that can accommodate the task
-        2. For each candidate, estimate energy cost
+        1. Filter cells/HW types that can accommodate ALL VMs
+        2. For each candidate, estimate energy cost and allocate VMs to specific servers
         3. Select the one with lowest energy cost
 
         Args:
             request: Allocation request
 
         Returns:
-            Tuple of (cell_id, hw_type_id, energy_cost, reason) or None if no allocation
+            Tuple of (vm_allocations, energy_cost, reason) or None if no allocation
         """
         task = request.task
         candidates = []
 
-        # Iterate through all cells and hardware types
         for cell in request.cells:
             for hw_type in cell.hw_types:
-                # Check if this HW type matches task requirements
                 if not self._is_compatible(task, hw_type):
                     continue
 
-                # Check resource availability
                 if not self._has_sufficient_resources(task, hw_type, cell):
                     continue
 
-                # Estimate energy cost for this allocation
                 energy_cost = self._estimate_energy_cost(task, hw_type, cell)
-
-                # Calculate efficiency score (prefer less utilized servers for energy savings)
                 efficiency = self._calculate_efficiency_score(hw_type, cell)
 
                 candidates.append({
-                    'cell_id': cell.cell_id,
-                    'hw_type_id': hw_type.hw_type_id,
-                    'hw_type_name': hw_type.hw_type_name,
+                    'cell': cell,
+                    'hw_type': hw_type,
                     'energy_cost': energy_cost,
                     'efficiency': efficiency,
-                    'score': energy_cost * (2.0 - efficiency)  # Lower is better
+                    'score': energy_cost * (2.0 - efficiency)
                 })
 
         if not candidates:
             return None
 
-        # Select candidate with lowest score (best energy efficiency)
         best = min(candidates, key=lambda x: x['score'])
 
-        reason = (
-            f"Selected {best['hw_type_name']} in Cell {best['cell_id']} "
-            f"for optimal energy efficiency (Est: {best['energy_cost']:.4f} kWh)"
+        vm_allocations = self._allocate_vms_to_servers(
+            task,
+            best['cell'],
+            best['hw_type']
         )
 
-        return (best['cell_id'], best['hw_type_id'], best['energy_cost'], reason)
+        if not vm_allocations:
+            return None
+
+        reason = (
+            f"Allocated {len(vm_allocations)} VMs to {best['hw_type'].hw_type_name} "
+            f"in Cell {best['cell'].cell_id} (Est: {best['energy_cost']:.4f} kWh)"
+        )
+
+        return (vm_allocations, best['energy_cost'], reason)
 
     def _is_compatible(self, task, hw_type: HardwareType) -> bool:
         """
@@ -222,8 +223,8 @@ class TaskAllocator:
         return energy
 
     def _calculate_efficiency_score(
-        self, 
-        hw_type: HardwareType, 
+        self,
+        hw_type: HardwareType,
         cell: CellStatus
     ) -> float:
         """Calculate efficiency score for this hardware type in the cell."""
@@ -234,7 +235,6 @@ class TaskAllocator:
 
         available = cell.available_resources[hw_id]
 
-        # Calculate total resources for this HW type
         total_cpus = hw_type.num_servers * hw_type.num_cpus_per_server
         total_memory = hw_type.num_servers * hw_type.memory_per_server
         total_accelerators = hw_type.num_servers * hw_type.num_accelerators_per_server
@@ -247,6 +247,99 @@ class TaskAllocator:
             available_accelerators=available.get('accelerators', 0),
             total_accelerators=total_accelerators
         )
+
+    def _allocate_vms_to_servers(
+        self,
+        task,
+        cell: CellStatus,
+        hw_type: HardwareType
+    ) -> List[VMAllocation]:
+        """
+        Allocate VMs to specific servers using first-fit strategy.
+
+        Args:
+            task: Task requirements
+            cell: Selected cell
+            hw_type: Selected hardware type
+
+        Returns:
+            List of VM allocations with server assignments
+        """
+        vm_allocations = []
+        hw_id = hw_type.hw_type_id
+
+        available = cell.available_resources.get(hw_id, {})
+        total_servers = hw_type.num_servers
+        cpus_per_server = hw_type.num_cpus_per_server
+        memory_per_server = hw_type.memory_per_server
+        storage_per_server = hw_type.storage_per_server
+        accelerators_per_server = hw_type.num_accelerators_per_server
+
+        available_cpus_per_server = [cpus_per_server] * total_servers
+        available_memory_per_server = [memory_per_server] * total_servers
+        available_storage_per_server = [storage_per_server] * total_servers
+        available_accelerators_per_server = [accelerators_per_server] * total_servers
+
+        total_available_cpus = available.get('cpu', 0)
+        total_available_memory = available.get('memory', 0)
+        total_available_storage = available.get('storage', 0)
+        total_available_accelerators = available.get('accelerators', 0)
+
+        total_used_cpus = (total_servers * cpus_per_server) - total_available_cpus
+        total_used_memory = (total_servers * memory_per_server) - total_available_memory
+        total_used_storage = (total_servers * storage_per_server) - total_available_storage
+        total_used_accelerators = (total_servers * accelerators_per_server) - total_available_accelerators
+
+        avg_used_cpus = total_used_cpus / max(total_servers, 1)
+        avg_used_memory = total_used_memory / max(total_servers, 1)
+        avg_used_storage = total_used_storage / max(total_servers, 1)
+        avg_used_accelerators = total_used_accelerators / max(total_servers, 1) if accelerators_per_server > 0 else 0
+
+        for server_idx in range(total_servers):
+            available_cpus_per_server[server_idx] = max(0, cpus_per_server - avg_used_cpus)
+            available_memory_per_server[server_idx] = max(0, memory_per_server - avg_used_memory)
+            available_storage_per_server[server_idx] = max(0, storage_per_server - avg_used_storage)
+            if accelerators_per_server > 0:
+                available_accelerators_per_server[server_idx] = max(0, accelerators_per_server - avg_used_accelerators)
+
+        for vm_idx in range(task.num_vms):
+            allocated = False
+
+            for server_idx in range(total_servers):
+                can_fit = (
+                    available_cpus_per_server[server_idx] >= task.vcpus_per_vm and
+                    available_memory_per_server[server_idx] >= task.memory_per_vm and
+                    available_storage_per_server[server_idx] >= task.storage_per_vm
+                )
+
+                if task.requires_accelerator:
+                    can_fit = can_fit and (available_accelerators_per_server[server_idx] >= 1)
+
+                if can_fit:
+                    vm_allocations.append(VMAllocation(
+                        vm_index=vm_idx,
+                        cell_id=cell.cell_id,
+                        hw_type_id=hw_id,
+                        server_index=server_idx
+                    ))
+
+                    available_cpus_per_server[server_idx] -= task.vcpus_per_vm
+                    available_memory_per_server[server_idx] -= task.memory_per_vm
+                    available_storage_per_server[server_idx] -= task.storage_per_vm
+                    if task.requires_accelerator:
+                        available_accelerators_per_server[server_idx] -= 1
+
+                    allocated = True
+                    break
+
+            if not allocated:
+                logger.warning(
+                    f"Could not allocate VM {vm_idx} for task {task.task_id}. "
+                    f"Only {len(vm_allocations)}/{task.num_vms} VMs allocated."
+                )
+                return []
+
+        return vm_allocations
 
     def get_statistics(self) -> dict:
         """Get allocator statistics."""

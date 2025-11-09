@@ -88,11 +88,22 @@ class AllocationRequest(BaseModel):
         }
 
 
+class VMAllocation(BaseModel):
+    """Allocation details for a single VM."""
+    vm_index: int = Field(..., description="VM index (0 to num_vms-1)")
+    cell_id: int = Field(..., description="Cell where VM should be deployed")
+    hw_type_id: int = Field(..., description="Hardware type for this VM")
+    server_index: int = Field(..., description="Server index within the hw_type")
+
+
 class AllocationDecision(BaseModel):
-    """Response containing the allocation decision."""
+    """Response containing the allocation decision for multi-VM tasks."""
     success: bool = Field(..., description="Whether allocation is possible")
-    cell_id: Optional[int] = Field(None, description="Selected cell ID")
-    hw_type_id: Optional[int] = Field(None, description="Selected hardware type ID")
+    num_vms_allocated: int = Field(default=0, description="Number of VMs successfully allocated")
+    vm_allocations: List[VMAllocation] = Field(
+        default_factory=list,
+        description="Allocation details for each VM"
+    )
     estimated_energy_cost: Optional[float] = Field(None, description="Estimated energy cost (kWh)")
     reason: Optional[str] = Field(None, description="Explanation of decision")
     allocation_method: str = Field(..., description="Method used for allocation")
@@ -102,8 +113,11 @@ class AllocationDecision(BaseModel):
         json_schema_extra = {
             "example": {
                 "success": True,
-                "cell_id": 1,
-                "hw_type_id": 1,
+                "num_vms_allocated": 2,
+                "vm_allocations": [
+                    {"vm_index": 0, "cell_id": 1, "hw_type_id": 1, "server_index": 0},
+                    {"vm_index": 1, "cell_id": 1, "hw_type_id": 1, "server_index": 1}
+                ],
                 "estimated_energy_cost": 0.5,
                 "reason": "Optimal energy efficiency",
                 "allocation_method": "heuristic_energy_aware",

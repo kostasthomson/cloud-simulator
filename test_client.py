@@ -141,7 +141,7 @@ def create_example_request() -> Dict[str, Any]:
 
 def main():
     """Run example test."""
-    print("🧪 Smart Task Allocator - Test Client")
+    print("Smart Task Allocator - Test Client")
     print("=" * 50)
 
     # Create client
@@ -151,11 +151,11 @@ def main():
     print("\n1. Checking service health...")
     try:
         health = client.health_check()
-        print(f"   ✓ Service is healthy")
+        print(f"   [OK] Service is healthy")
         print(f"     Version: {health['version']}")
         print(f"     Model: {health['model_type']}")
     except Exception as e:
-        print(f"   ✗ Health check failed: {e}")
+        print(f"   [ERROR] Health check failed: {e}")
         return
 
     # 2. Test allocation request
@@ -164,30 +164,33 @@ def main():
 
     try:
         decision = client.allocate_task(request)
-        print(f"   ✓ Allocation decision received:")
+        print(f"   [OK] Allocation decision received:")
         print(f"     Success: {decision['success']}")
         if decision['success']:
-            print(f"     Cell ID: {decision['cell_id']}")
-            print(f"     HW Type ID: {decision['hw_type_id']}")
+            print(f"     VMs Allocated: {decision['num_vms_allocated']}")
             print(f"     Energy Cost: {decision['estimated_energy_cost']:.4f} kWh")
             print(f"     Reason: {decision['reason']}")
+            print(f"     VM Allocations:")
+            for vm_alloc in decision['vm_allocations']:
+                print(f"       - VM {vm_alloc['vm_index']}: Cell {vm_alloc['cell_id']}, "
+                      f"HW Type {vm_alloc['hw_type_id']}, Server {vm_alloc['server_index']}")
         else:
             print(f"     Reason: {decision['reason']}")
     except Exception as e:
-        print(f"   ✗ Allocation request failed: {e}")
+        print(f"   [ERROR] Allocation request failed: {e}")
         return
 
     # 3. Get statistics
     print("\n3. Retrieving statistics...")
     try:
         stats = client.get_statistics()
-        print(f"   ✓ Statistics:")
+        print(f"   [OK] Statistics:")
         print(f"     {json.dumps(stats['statistics'], indent=6)}")
     except Exception as e:
-        print(f"   ✗ Statistics retrieval failed: {e}")
+        print(f"   [ERROR] Statistics retrieval failed: {e}")
 
     print("\n" + "=" * 50)
-    print("✅ Test completed successfully!")
+    print("Test completed successfully!")
 
 
 if __name__ == "__main__":
