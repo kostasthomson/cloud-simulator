@@ -11,6 +11,7 @@ from models.schemas import AllocationRequest, AllocationDecision, HealthCheckRes
 from services.allocator import TaskAllocator
 from config.settings import settings
 from utils.logger import setup_logging
+from utils.allocation_logger import AllocationLogger
 
 # Setup logging
 setup_logging()
@@ -18,12 +19,13 @@ logger = logging.getLogger(__name__)
 
 # Global allocator instance
 allocator: TaskAllocator = None
+allocation_logger: AllocationLogger = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
-    global allocator
+    global allocator, allocation_logger
 
     # Startup
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
@@ -32,6 +34,7 @@ async def lifespan(app: FastAPI):
     # Initialize allocator
     allocator = TaskAllocator()
     logger.info("Task allocator initialized")
+    logger.info("Task allocator and allocation logger initialized")
 
     yield
 
@@ -39,6 +42,9 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down application")
     stats = allocator.get_statistics()
     logger.info(f"Final statistics: {stats}")
+
+    allocation_logger.save_to_file()
+    logger.info("Allocation decisions saved to file")
 
 
 # Create FastAPI application
@@ -113,6 +119,8 @@ async def allocate_task(request: AllocationRequest) -> AllocationDecision:
         # Get allocation decision
         decision = allocator.allocate_task(request)
 
+        allocation_logger.log_decision(request, decision)
+
         logger.info(
             f"Decision for task {request.task.task_id}: "
             f"{'SUCCESS' if decision.success else 'REJECTED'}"
@@ -136,9 +144,12 @@ async def get_statistics():
     """
     try:
         stats = allocator.get_statistics()
+        log_summary = allocation_logger.get_summary()
+
         return {
             "status": "success",
-            "statistics": stats
+            "statistics": stats,
+            "logged_decisions": log_summary
         }
     except Exception as e:
         logger.error(f"Error retrieving statistics: {str(e)}")
@@ -153,6 +164,36 @@ async def reset_statistics():
         allocator = TaskAllocator()
         logger.info("Statistics reset")
         return {"status": "success", "message": "Statistics reset"}
+    except Exception as e:
+        logger.error(f"Error resetting statistics: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/save_logs")
+async def save_logs():
+    """Manually trigger saving of allocation logs to file."""
+    try:
+        allocation_logger.save_to_file()
+        summary = allocation_logger.get_summary()
+        return {
+            "status": "success",
+            "message": "Allocation logs saved successfully",
+            "summary": summary
+        }
+    except Exception as e:
+        logger.error(f"Error saving logs: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/reset_statistics")
+async def reset_statistics():
+    """Reset allocation statistics."""
+    try:
+        global allocator, allocation_logger
+        allocator = TaskAllocator()
+        allocation_logger = AllocationLogger()  # ✅ ADD THIS LINE
+        logger.info("Statistics and logs reset")
+        return {"status": "success", "message": "Statistics and logs reset"}
     except Exception as e:
         logger.error(f"Error resetting statistics: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
