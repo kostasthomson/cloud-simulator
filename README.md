@@ -53,6 +53,8 @@ smart_allocator/
 
 ### Setup
 
+Run the script ``quickstart.sh`` at the root level. Or manually:
+
 1. **Create virtual environment:**
    ```bash
    python -m venv venv
