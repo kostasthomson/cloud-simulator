@@ -3,7 +3,7 @@ Logging configuration and utilities.
 """
 import logging
 import sys
-from pythonjsonlogger import jsonlogger
+from pythonjsonlogger import json as jsonlogger
 from config.settings import settings
 
 

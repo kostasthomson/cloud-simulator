@@ -6,6 +6,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any
+from config import settings
 from models.schemas import AllocationRequest, AllocationDecision
 
 logger = logging.getLogger(__name__)
@@ -69,13 +70,7 @@ class AllocationLogger:
                     for cell in request.cells
                 ]
             },
-            "decision": {
-                "success": decision.success,
-                "cell_id": decision.cell_id,
-                "hw_type_id": decision.hw_type_id,
-                "estimated_energy_cost": decision.estimated_energy_cost,
-                "reason": decision.reason
-            }
+            "decision": str(decision)
         }
 
         self.decisions.append(log_entry)
@@ -93,6 +88,7 @@ class AllocationLogger:
             output_data = {
                 "metadata": {
                     "generated_at": datetime.now().isoformat(),
+                    "model": settings.model_type,
                     "total_requests": self.request_count,
                     "successful_allocations": self.success_count,
                     "rejected_allocations": self.rejection_count,

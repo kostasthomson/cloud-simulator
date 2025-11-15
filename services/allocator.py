@@ -6,7 +6,7 @@ from typing import Optional, Tuple, List
 import logging
 from models.schemas import AllocationRequest, AllocationDecision, VMAllocation, CellStatus, HardwareType
 from services.energy_calculator import EnergyCalculator
-
+from utils.allocation_logger import AllocationLogger
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,7 @@ class TaskAllocator:
     def __init__(self):
         """Initialize the allocator with energy calculator."""
         self.energy_calc = EnergyCalculator()
+        self.logger = AllocationLogger()
         self.allocation_count = 0
         self.rejection_count = 0
 
@@ -36,7 +37,7 @@ class TaskAllocator:
             AllocationDecision with selected cell/server or rejection
         """
         self.allocation_count += 1
-
+        decision = None
         try:
             allocation = self._heuristic_energy_aware_allocation(request)
 
@@ -46,7 +47,7 @@ class TaskAllocator:
                     f"Task {request.task.task_id} allocated {len(vm_allocations)} VMs, "
                     f"Est. Energy: {energy_cost:.4f} kWh"
                 )
-                return AllocationDecision(
+                decision = AllocationDecision(
                     success=True,
                     num_vms_allocated=len(vm_allocations),
                     vm_allocations=vm_allocations,
@@ -58,7 +59,7 @@ class TaskAllocator:
             else:
                 self.rejection_count += 1
                 logger.warning(f"Task {request.task.task_id} rejected - no suitable resources")
-                return AllocationDecision(
+                decision = AllocationDecision(
                     success=False,
                     num_vms_allocated=0,
                     reason="No suitable resources available in any cell",
@@ -68,16 +69,19 @@ class TaskAllocator:
 
         except Exception as e:
             logger.error(f"Error allocating task {request.task.task_id}: {str(e)}")
-            return AllocationDecision(
+            decision = AllocationDecision(
                 success=False,
                 reason=f"Internal error: {str(e)}",
                 allocation_method="heuristic_energy_aware",
                 timestamp=request.timestamp
             )
+        finally:
+            self.logger.log_decision(request, decision)
+        return decision
 
     def _heuristic_energy_aware_allocation(
-        self,
-        request: AllocationRequest
+            self,
+            request: AllocationRequest
     ) -> Optional[Tuple[List[VMAllocation], float, str]]:
         """
         Heuristic allocation optimizing for energy efficiency with multi-VM support.
@@ -161,10 +165,10 @@ class TaskAllocator:
         return False
 
     def _has_sufficient_resources(
-        self, 
-        task, 
-        hw_type: HardwareType, 
-        cell: CellStatus
+            self,
+            task,
+            hw_type: HardwareType,
+            cell: CellStatus
     ) -> bool:
         """Check if sufficient resources are available."""
         hw_id = hw_type.hw_type_id
@@ -195,10 +199,10 @@ class TaskAllocator:
         return all(checks)
 
     def _estimate_energy_cost(
-        self, 
-        task, 
-        hw_type: HardwareType, 
-        cell: CellStatus
+            self,
+            task,
+            hw_type: HardwareType,
+            cell: CellStatus
     ) -> float:
         """Estimate energy cost for running task on this hardware."""
         # Use estimated task duration or default
@@ -223,9 +227,9 @@ class TaskAllocator:
         return energy
 
     def _calculate_efficiency_score(
-        self,
-        hw_type: HardwareType,
-        cell: CellStatus
+            self,
+            hw_type: HardwareType,
+            cell: CellStatus
     ) -> float:
         """Calculate efficiency score for this hardware type in the cell."""
         hw_id = hw_type.hw_type_id
@@ -249,10 +253,10 @@ class TaskAllocator:
         )
 
     def _allocate_vms_to_servers(
-        self,
-        task,
-        cell: CellStatus,
-        hw_type: HardwareType
+            self,
+            task,
+            cell: CellStatus,
+            hw_type: HardwareType
     ) -> List[VMAllocation]:
         """
         Allocate VMs to specific servers using first-fit strategy.
@@ -307,9 +311,9 @@ class TaskAllocator:
 
             for server_idx in range(total_servers):
                 can_fit = (
-                    available_cpus_per_server[server_idx] >= task.vcpus_per_vm and
-                    available_memory_per_server[server_idx] >= task.memory_per_vm and
-                    available_storage_per_server[server_idx] >= task.storage_per_vm
+                        available_cpus_per_server[server_idx] >= task.vcpus_per_vm and
+                        available_memory_per_server[server_idx] >= task.memory_per_vm and
+                        available_storage_per_server[server_idx] >= task.storage_per_vm
                 )
 
                 if task.requires_accelerator:
@@ -346,7 +350,11 @@ class TaskAllocator:
         return {
             "total_allocations": self.allocation_count,
             "rejections": self.rejection_count,
-            "success_rate": (
-                (self.allocation_count - self.rejection_count) / max(self.allocation_count, 1)
-            ) * 100
+            "success_rate": ((self.allocation_count - self.rejection_count) / max(self.allocation_count, 1)) * 100
         }
+
+    def get_logs(self) -> dict:
+        return self.logger.get_summary()
+
+    def save_logs(self) -> None:
+        self.logger.save_to_file()

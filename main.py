@@ -11,7 +11,6 @@ from models.schemas import AllocationRequest, AllocationDecision, HealthCheckRes
 from services.allocator import TaskAllocator
 from config.settings import settings
 from utils.logger import setup_logging
-from utils.allocation_logger import AllocationLogger
 
 # Setup logging
 setup_logging()
@@ -19,13 +18,12 @@ logger = logging.getLogger(__name__)
 
 # Global allocator instance
 allocator: TaskAllocator = None
-allocation_logger: AllocationLogger = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
-    global allocator, allocation_logger
+    global allocator
 
     # Startup
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
@@ -43,7 +41,7 @@ async def lifespan(app: FastAPI):
     stats = allocator.get_statistics()
     logger.info(f"Final statistics: {stats}")
 
-    allocation_logger.save_to_file()
+    allocator.save_logs()
     logger.info("Allocation decisions saved to file")
 
 
@@ -119,8 +117,6 @@ async def allocate_task(request: AllocationRequest) -> AllocationDecision:
         # Get allocation decision
         decision = allocator.allocate_task(request)
 
-        allocation_logger.log_decision(request, decision)
-
         logger.info(
             f"Decision for task {request.task.task_id}: "
             f"{'SUCCESS' if decision.success else 'REJECTED'}"
@@ -144,7 +140,7 @@ async def get_statistics():
     """
     try:
         stats = allocator.get_statistics()
-        log_summary = allocation_logger.get_summary()
+        log_summary = allocator.get_logs()
 
         return {
             "status": "success",
@@ -173,10 +169,11 @@ async def reset_statistics():
 async def save_logs():
     """Manually trigger saving of allocation logs to file."""
     try:
-        allocation_logger.save_to_file()
-        summary = allocation_logger.get_summary()
+        allocator.save_logs()
+        summary = allocator.get_logs()
         return {
             "status": "success",
+            "model": settings.model_type,
             "message": "Allocation logs saved successfully",
             "summary": summary
         }
@@ -189,9 +186,8 @@ async def save_logs():
 async def reset_statistics():
     """Reset allocation statistics."""
     try:
-        global allocator, allocation_logger
+        global allocator
         allocator = TaskAllocator()
-        allocation_logger = AllocationLogger()  # ✅ ADD THIS LINE
         logger.info("Statistics and logs reset")
         return {"status": "success", "message": "Statistics and logs reset"}
     except Exception as e:
