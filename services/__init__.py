@@ -1,4 +1,4 @@
 """Configuration package."""
-from config.settings import settings
+from .energy_calculator import EnergyCalculator
 
-__all__ = ["settings"]
+__all__ = ["EnergyCalculator"]

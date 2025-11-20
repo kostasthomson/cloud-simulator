@@ -1,4 +1,13 @@
 """Configuration package."""
-from config.settings import settings
+from .schemas import HardwareType, CellStatus, TaskRequirements, AllocationRequest, VMAllocation, AllocationDecision, \
+    HealthCheckResponse
 
-__all__ = ["settings"]
+__all__ = [
+    "HardwareType",
+    "CellStatus",
+    "TaskRequirements",
+    "AllocationRequest",
+    "VMAllocation",
+    "AllocationDecision",
+    "HealthCheckResponse"
+]

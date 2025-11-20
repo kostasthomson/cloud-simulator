@@ -6,8 +6,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any
-from config import settings
-from models.schemas import AllocationRequest, AllocationDecision
+from config import configuration
+from models import AllocationRequest, AllocationDecision
 
 logger = logging.getLogger(__name__)
 
@@ -16,11 +16,14 @@ class AllocationLogger:
     """Logs and persists allocation decisions to JSON file."""
 
     def __init__(self, output_file: str = "allocation_decisions.json"):
-        self.output_file = Path(output_file)
+        self.output_file = Path("output", configuration.model_type, output_file)
         self.decisions: List[Dict[str, Any]] = []
         self.request_count = 0
         self.success_count = 0
         self.rejection_count = 0
+
+        # Ensure directory exists
+        self.output_file.parent.mkdir(parents=True, exist_ok=True)
 
     def log_decision(
             self,
@@ -82,13 +85,13 @@ class AllocationLogger:
             f"{'SUCCESS' if decision.success else 'REJECTED'}"
         )
 
-    def save_to_file(self) -> None:
+    def save_to_file(self) -> bool:
         """Save all logged decisions to JSON file."""
         try:
             output_data = {
                 "metadata": {
                     "generated_at": datetime.now().isoformat(),
-                    "model": settings.model_type,
+                    "model": configuration.model_type,
                     "total_requests": self.request_count,
                     "successful_allocations": self.success_count,
                     "rejected_allocations": self.rejection_count,
@@ -106,9 +109,10 @@ class AllocationLogger:
             logger.info(
                 f"Saved {self.request_count} allocation decisions to {self.output_file}"
             )
-
+            return True
         except Exception as e:
             logger.error(f"Failed to save allocation log: {e}", exc_info=True)
+            return False
 
     def get_summary(self) -> Dict[str, Any]:
         """Get summary statistics of logged decisions."""
@@ -121,3 +125,9 @@ class AllocationLogger:
                 if self.request_count > 0 else 0.0
             )
         }
+
+    def reset(self) -> None:
+        self.decisions: List[Dict[str, Any]] = []
+        self.request_count = 0
+        self.success_count = 0
+        self.rejection_count = 0

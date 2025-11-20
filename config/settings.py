@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings
 from typing import Optional
 
 
-class Settings(BaseSettings):
+class Configuration(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # API Settings
@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     log_format: str = "json"  # or "text"
 
     # Model Settings
-    model_type: str = "heuristic_energy_aware"
+    model_type: str = ""
     default_task_duration: float = 3600.0  # seconds
 
     # Performance
@@ -31,4 +31,4 @@ class Settings(BaseSettings):
         case_sensitive = False
 
 
-settings = Settings()
+configuration = Configuration()

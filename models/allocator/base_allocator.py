@@ -1,34 +1,33 @@
-"""
-Core allocation service implementing the smart allocation algorithm.
-Starts with a simple heuristic approach optimizing for energy efficiency.
-"""
+from abc import ABC, abstractmethod
 from typing import Optional, Tuple, List
 import logging
-from models.schemas import AllocationRequest, AllocationDecision, VMAllocation, CellStatus, HardwareType
-from services.energy_calculator import EnergyCalculator
-from utils.allocation_logger import AllocationLogger
+
+from config import configuration
+from models import AllocationRequest, AllocationDecision, VMAllocation, CellStatus, HardwareType
+from services import EnergyCalculator
+from utils import AllocationLogger
 
 logger = logging.getLogger(__name__)
 
 
-class TaskAllocator:
+class BaseAllocator(ABC):
     """
-    Smart task allocation service.
-
-    Current implementation: Heuristic-based energy-aware allocation.
-    Future extensions: ML-based prediction, RL-based optimization.
+    Abstract base class for task allocators.
+    Defines the common interface and shared functionality for all allocation strategies.
     """
 
     def __init__(self):
-        """Initialize the allocator with energy calculator."""
+        """Initialize common components for all allocators."""
+        configuration.model_type = self.get_method_name()
         self.energy_calc = EnergyCalculator()
-        self.logger = AllocationLogger()
+        self.file_logger = AllocationLogger()
         self.allocation_count = 0
         self.rejection_count = 0
 
     def allocate_task(self, request: AllocationRequest) -> AllocationDecision:
         """
-        Main allocation decision logic.
+        Main allocation decision logic with template method pattern.
+        This method orchestrates the allocation process and is final.
 
         Args:
             request: Allocation request with system state and task requirements
@@ -38,8 +37,9 @@ class TaskAllocator:
         """
         self.allocation_count += 1
         decision = None
+
         try:
-            allocation = self._heuristic_energy_aware_allocation(request)
+            allocation = self._perform_allocation(request)
 
             if allocation:
                 vm_allocations, energy_cost, reason = allocation
@@ -47,13 +47,14 @@ class TaskAllocator:
                     f"Task {request.task.task_id} allocated {len(vm_allocations)} VMs, "
                     f"Est. Energy: {energy_cost:.4f} kWh"
                 )
+
                 decision = AllocationDecision(
                     success=True,
                     num_vms_allocated=len(vm_allocations),
                     vm_allocations=vm_allocations,
                     estimated_energy_cost=energy_cost,
                     reason=reason,
-                    allocation_method="heuristic_energy_aware",
+                    allocation_method=self.get_method_name(),
                     timestamp=request.timestamp
                 )
             else:
@@ -62,8 +63,8 @@ class TaskAllocator:
                 decision = AllocationDecision(
                     success=False,
                     num_vms_allocated=0,
-                    reason="No suitable resources available in any cell",
-                    allocation_method="heuristic_energy_aware",
+                    reason="No suitable resources available",
+                    allocation_method=self.get_method_name(),
                     timestamp=request.timestamp
                 )
 
@@ -72,24 +73,23 @@ class TaskAllocator:
             decision = AllocationDecision(
                 success=False,
                 reason=f"Internal error: {str(e)}",
-                allocation_method="heuristic_energy_aware",
+                allocation_method=self.get_method_name(),
                 timestamp=request.timestamp
             )
+
         finally:
-            self.logger.log_decision(request, decision)
+            self.file_logger.log_decision(request, decision)
+
         return decision
 
-    def _heuristic_energy_aware_allocation(
+    @abstractmethod
+    def _perform_allocation(
             self,
             request: AllocationRequest
     ) -> Optional[Tuple[List[VMAllocation], float, str]]:
         """
-        Heuristic allocation optimizing for energy efficiency with multi-VM support.
-
-        Strategy:
-        1. Filter cells/HW types that can accommodate ALL VMs
-        2. For each candidate, estimate energy cost and allocate VMs to specific servers
-        3. Select the one with lowest energy cost
+        Abstract method to be implemented by concrete allocators.
+        Each allocator implements its own allocation strategy.
 
         Args:
             request: Allocation request
@@ -97,70 +97,23 @@ class TaskAllocator:
         Returns:
             Tuple of (vm_allocations, energy_cost, reason) or None if no allocation
         """
-        task = request.task
-        candidates = []
+        pass
 
-        for cell in request.cells:
-            for hw_type in cell.hw_types:
-                if not self._is_compatible(task, hw_type):
-                    continue
+    @abstractmethod
+    def get_method_name(self) -> str:
+        """Return the name of the allocation method."""
+        pass
 
-                if not self._has_sufficient_resources(task, hw_type, cell):
-                    continue
-
-                energy_cost = self._estimate_energy_cost(task, hw_type, cell)
-                efficiency = self._calculate_efficiency_score(hw_type, cell)
-
-                candidates.append({
-                    'cell': cell,
-                    'hw_type': hw_type,
-                    'energy_cost': energy_cost,
-                    'efficiency': efficiency,
-                    'score': energy_cost * (2.0 - efficiency)
-                })
-
-        if not candidates:
-            return None
-
-        best = min(candidates, key=lambda x: x['score'])
-
-        vm_allocations = self._allocate_vms_to_servers(
-            task,
-            best['cell'],
-            best['hw_type']
-        )
-
-        if not vm_allocations:
-            return None
-
-        reason = (
-            f"Allocated {len(vm_allocations)} VMs to {best['hw_type'].hw_type_name} "
-            f"in Cell {best['cell'].cell_id} (Est: {best['energy_cost']:.4f} kWh)"
-        )
-
-        return (vm_allocations, best['energy_cost'], reason)
-
+    # Shared helper methods that all allocators can use
     def _is_compatible(self, task, hw_type: HardwareType) -> bool:
-        """
-        Check if hardware type is compatible with task implementation.
-
-        Implementation mapping:
-        1 = CPU only
-        2 = GPU (needs CPU+GPU)
-        3 = DFE (needs CPU+DFE)
-        4 = MIC (needs CPU+MIC)
-        """
+        """Check if hardware type is compatible with task implementation."""
         if task.implementation_id == 1:
-            # CPU-only tasks can run on any hardware
             return True
         elif task.implementation_id == 2:
-            # GPU tasks need GPU accelerators
             return hw_type.accelerators > 0 and "GPU" in hw_type.hw_type_name.upper()
         elif task.implementation_id == 3:
-            # DFE tasks need DFE accelerators
             return hw_type.accelerators > 0 and "DFE" in hw_type.hw_type_name.upper()
         elif task.implementation_id == 4:
-            # MIC tasks need MIC accelerators
             return hw_type.accelerators > 0 and "MIC" in hw_type.hw_type_name.upper()
         return False
 
@@ -172,20 +125,16 @@ class TaskAllocator:
     ) -> bool:
         """Check if sufficient resources are available."""
         hw_id = hw_type.hw_type_id
-
         if hw_id not in cell.available_resources:
             return False
 
         available = cell.available_resources[hw_id]
-
-        # Calculate total resource requirements
         total_cpus_needed = task.num_vms * task.vcpus_per_vm
         total_memory_needed = task.num_vms * task.memory_per_vm
         total_storage_needed = task.num_vms * task.storage_per_vm
         total_network_needed = task.num_vms * task.network_per_vm
         total_accelerators_needed = task.num_vms if task.requires_accelerator else 0
 
-        # Check each resource
         checks = [
             available.get('cpu', 0) >= total_cpus_needed,
             available.get('memory', 0) >= total_memory_needed,
@@ -205,13 +154,9 @@ class TaskAllocator:
             cell: CellStatus
     ) -> float:
         """Estimate energy cost for running task on this hardware."""
-        # Use estimated task duration or default
-        duration = task.estimated_duration if task.estimated_duration else 3600.0  # 1 hour default
-
-        # Estimate CPU utilization (assume high utilization for HPC tasks)
+        duration = task.estimated_duration if task.estimated_duration else 3600.0
         cpu_utilization = 0.8
 
-        # Calculate energy using the energy calculator
         energy = self.energy_calc.estimate_task_energy(
             task_vcpus=task.num_vms * task.vcpus_per_vm,
             task_duration=duration,
@@ -225,32 +170,6 @@ class TaskAllocator:
         )
 
         return energy
-
-    def _calculate_efficiency_score(
-            self,
-            hw_type: HardwareType,
-            cell: CellStatus
-    ) -> float:
-        """Calculate efficiency score for this hardware type in the cell."""
-        hw_id = hw_type.hw_type_id
-
-        if hw_id not in cell.available_resources:
-            return 0.0
-
-        available = cell.available_resources[hw_id]
-
-        total_cpus = hw_type.num_servers * hw_type.num_cpus_per_server
-        total_memory = hw_type.num_servers * hw_type.memory_per_server
-        total_accelerators = hw_type.num_servers * hw_type.num_accelerators_per_server
-
-        return self.energy_calc.calculate_server_efficiency(
-            available_cpus=available.get('cpu', 0),
-            total_cpus=total_cpus,
-            available_memory=available.get('memory', 0),
-            total_memory=total_memory,
-            available_accelerators=available.get('accelerators', 0),
-            total_accelerators=total_accelerators
-        )
 
     def _allocate_vms_to_servers(
             self,
@@ -350,11 +269,17 @@ class TaskAllocator:
         return {
             "total_allocations": self.allocation_count,
             "rejections": self.rejection_count,
-            "success_rate": ((self.allocation_count - self.rejection_count) / max(self.allocation_count, 1)) * 100
+            "success_rate": ((self.allocation_count - self.rejection_count) /
+                             max(self.allocation_count, 1)) * 100
         }
 
     def get_logs(self) -> dict:
-        return self.logger.get_summary()
+        return self.file_logger.get_summary()
 
-    def save_logs(self) -> None:
-        self.logger.save_to_file()
+    def save_logs(self) -> bool:
+        return self.file_logger.save_to_file()
+
+    def reset(self) -> None:
+        self.allocation_count = 0
+        self.rejection_count = 0
+        self.file_logger.reset()

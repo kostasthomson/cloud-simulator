@@ -7,17 +7,17 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 from contextlib import asynccontextmanager
 
-from models.schemas import AllocationRequest, AllocationDecision, HealthCheckResponse
-from services.allocator import TaskAllocator
-from config.settings import settings
-from utils.logger import setup_logging
+from models import AllocationRequest, AllocationDecision, HealthCheckResponse
+from config import configuration
+from models.allocator import BaseAllocator, HeuristicAllocator
+from utils import setup_logging
 
 # Setup logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
 # Global allocator instance
-allocator: TaskAllocator = None
+allocator: BaseAllocator = None
 
 
 @asynccontextmanager
@@ -26,13 +26,13 @@ async def lifespan(app: FastAPI):
     global allocator
 
     # Startup
-    logger.info(f"Starting {settings.app_name} v{settings.app_version}")
-    logger.info(f"Model type: {settings.model_type}")
+    logger.info(f"Starting {configuration.app_name} v{configuration.app_version}")
 
     # Initialize allocator
-    allocator = TaskAllocator()
+    allocator = HeuristicAllocator()
     logger.info("Task allocator initialized")
     logger.info("Task allocator and allocation logger initialized")
+    logger.info(f"Model type: {configuration.model_type}")
 
     yield
 
@@ -47,17 +47,17 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI application
 app = FastAPI(
-    title=settings.app_name,
-    version=settings.app_version,
+    title=configuration.app_name,
+    version=configuration.app_version,
     description="Smart task allocation service for cloud simulation using ML/DL techniques",
     lifespan=lifespan
 )
 
 # Configure CORS
-if settings.enable_cors:
+if configuration.enable_cors:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=configuration.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -69,8 +69,8 @@ async def root():
     """Root endpoint - health check."""
     return HealthCheckResponse(
         status="healthy",
-        version=settings.app_version,
-        model_type=settings.model_type
+        version=configuration.app_version,
+        model_type=configuration.model_type
     )
 
 
@@ -79,8 +79,8 @@ async def health_check():
     """Health check endpoint."""
     return HealthCheckResponse(
         status="healthy",
-        version=settings.app_version,
-        model_type=settings.model_type
+        version=configuration.app_version,
+        model_type=configuration.model_type
     )
 
 
@@ -156,8 +156,7 @@ async def get_statistics():
 async def reset_statistics():
     """Reset allocation statistics."""
     try:
-        global allocator
-        allocator = TaskAllocator()
+        allocator.reset()
         logger.info("Statistics reset")
         return {"status": "success", "message": "Statistics reset"}
     except Exception as e:
@@ -169,11 +168,13 @@ async def reset_statistics():
 async def save_logs():
     """Manually trigger saving of allocation logs to file."""
     try:
-        allocator.save_logs()
+        saved_logs = allocator.save_logs()
+        if not saved_logs:
+            raise Exception("Failed to save logs to file")
         summary = allocator.get_logs()
         return {
             "status": "success",
-            "model": settings.model_type,
+            "model": configuration.model_type,
             "message": "Allocation logs saved successfully",
             "summary": summary
         }
@@ -182,26 +183,13 @@ async def save_logs():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/reset_statistics")
-async def reset_statistics():
-    """Reset allocation statistics."""
-    try:
-        global allocator
-        allocator = TaskAllocator()
-        logger.info("Statistics and logs reset")
-        return {"status": "success", "message": "Statistics and logs reset"}
-    except Exception as e:
-        logger.error(f"Error resetting statistics: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
         "main:app",
-        host=settings.api_host,
-        port=settings.api_port,
+        host=configuration.api_host,
+        port=configuration.api_port,
         reload=True,  # Enable auto-reload during development
-        log_level=settings.log_level.lower()
+        log_level=configuration.log_level.lower()
     )

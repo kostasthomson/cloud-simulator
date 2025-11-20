@@ -4,7 +4,7 @@ Logging configuration and utilities.
 import logging
 import sys
 from pythonjsonlogger import json as jsonlogger
-from config.settings import settings
+from config import configuration
 
 
 def setup_logging():
@@ -12,7 +12,7 @@ def setup_logging():
 
     # Create logger
     logger = logging.getLogger()
-    logger.setLevel(getattr(logging, settings.log_level.upper()))
+    logger.setLevel(getattr(logging, configuration.log_level.upper()))
 
     # Remove existing handlers
     logger.handlers = []
@@ -21,7 +21,7 @@ def setup_logging():
     handler = logging.StreamHandler(sys.stdout)
 
     # Configure formatter
-    if settings.log_format == "json":
+    if configuration.log_format == "json":
         formatter = jsonlogger.JsonFormatter(
             '%(timestamp)s %(level)s %(name)s %(message)s',
             rename_fields={"levelname": "level", "asctime": "timestamp"}
